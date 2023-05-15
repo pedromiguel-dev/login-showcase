@@ -33,7 +33,23 @@ const handleLogin = async (req: Request, res: Response, next: NextFunction) => {
 
     if (match) {
         const roles = userFound.role
-        return res.json({message: `logged in ${userFound.name}`, roles })
+
+        if (!process.env.ACCESS_TOKEN_S) return res.sendStatus(403);
+        if (!process.env.REFRESH_TOKEN_S) return res.sendStatus(403);
+
+        const accessToken = jwt.sign({user: {email: userFound.email, roles}}, process.env.ACCESS_TOKEN_S, {expiresIn: '10s'})
+        const refreshToken = jwt.sign({user: {email: userFound.email, roles}}, process.env.REFRESH_TOKEN_S, {expiresIn: '15s'})
+
+        const user = await prisma.user.update({
+            data: {
+                refreshToken
+            },
+            where: {
+                id: userFound.id
+            }
+        })
+        res.cookie("jwt", refreshToken, {httpOnly: true, sameSite: 'none', maxAge: 24 * 60 * 60 * 1000})
+        return res.json({message: `logged in ${userFound.name}`, roles, accessToken })
     }
     return res.json({message: "User or password incorrect"})
 }
